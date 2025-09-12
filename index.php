@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Student Enrollment</title>
+  <title>Student Enrollment App</title>
   <link rel="stylesheet" type="text/css" href="style.css">
 </head>
 <body>
