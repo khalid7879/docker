@@ -1,1 +1,36 @@
 
+name: Deploy PHP App to Nginx Server
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Deploy to server via SSH
+      uses: appleboy/ssh-action@v1.2.0
+      with:
+        host: 192.168.0.103          # Your server IP
+        username: php                # Replace with your server username
+        key: ${{ secrets.SSH_KEY }}  # Add your private SSH key in repo secrets
+        port: 22
+        script: |
+          cd /var/www/html
+          # Optional: backup existing app
+          tar -czf backup_$(date +%F).tar.gz *
+          # Clean and pull new code
+          rm -rf *
+          git clone https://github.com/khalid7879/docker.git .
+          # Set correct permissions
+          sudo chown -R www-data:www-data /var/www/html
+          sudo chmod -R 755 /var/www/html
+          # Restart PHP-FPM and Nginx
+          sudo systemctl restart php8.3-fpm
+          sudo systemctl reload nginx
