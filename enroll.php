@@ -7,7 +7,8 @@ $email = $_POST['email'];
 $sql = "INSERT INTO students (name, email) VALUES ('$name', '$email')";
 
 if ($conn->query($sql) === TRUE) {
-  echo "New record created successfully";
+  // The echo statement was causing the "headers already sent" error.
+  // It has been removed. The user will be redirected to index.php.
 } else {
   echo "Error: " . $sql . "<br>" . $conn->error;
 }
