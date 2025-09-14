@@ -19,17 +19,24 @@ jobs:
       - name: Login to Docker Hub
         run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
 
-      # ✅ Build & Push PHP-FPM Image
+      # Build & push PHP-FPM image
       - name: Build and Push PHP-FPM Image
         run: |
           docker build -f php.Dockerfile -t ${{ secrets.DOCKER_USERNAME }}/php-fpm-app:latest .
           docker push ${{ secrets.DOCKER_USERNAME }}/php-fpm-app:latest
 
-      # ✅ Build Nginx Image (with config validation)
-      - name: Build Nginx Image
+      # Build, validate & push Nginx image
+      - name: Build, Validate and Push Nginx Image
         run: |
           docker build -f Dockerfile -t nginx-test .
-          docker run --rm nginx-test nginx -t   # <-- validate nginx.conf
+
+          # Validate nginx.conf
+          if ! docker run --rm --network app_network nginx-test nginx -t; then
+            echo "❌ Nginx configuration failed! Logs:"
+            docker run --rm --network app_network nginx-test cat /var/log/nginx/error.log || true
+            exit 1
+          fi
+
           docker tag nginx-test ${{ secrets.DOCKER_USERNAME }}/nginx-app:latest
           docker push ${{ secrets.DOCKER_USERNAME }}/nginx-app:latest
 
@@ -51,7 +58,7 @@ jobs:
             # Create Docker network
             docker network create app_network || true
 
-            # Stop and remove old containers
+            # Stop & remove old containers
             docker rm -f php-app nginx-app mysql-db || true
 
             # Run MySQL
@@ -82,24 +89,8 @@ jobs:
               -e DB_NAME=student_enrollment \
               ${{ secrets.DOCKER_USERNAME }}/php-fpm-app:latest
 
-            # Run Nginx
-            docker run -d \
-              --name nginx-app \
-              --network app_network \
-              -p 80:80 \
-              -v /var/www/html:/var/www/html \
-              ${{ secrets.DOCKER_USERNAME }}/nginx-app:latest
-
-            # Wait a few seconds for containers to settle
-            sleep 5
-
-            echo "=== Running containers ==="
-            docker ps
-
-            echo "=== Logs: php-app ==="
-            docker logs php-app || true
-
-            echo "=== Logs: nginx-app ==="
-            docker logs nginx-app || true
-
-          EOF
+            # Wait for PHP-FPM to be ready before starting Nginx
+            echo "Waiting for PHP-FPM to be ready..."
+            timeout=60
+            count=0
+            until docker exec php-app bash -c "echo > /dev/tcp/127.0.0.1/9000" >/dev/
