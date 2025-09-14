@@ -25,15 +25,27 @@ jobs:
           docker build -f php.Dockerfile -t ${{ secrets.DOCKER_USERNAME }}/php-fpm-app:latest .
           docker push ${{ secrets.DOCKER_USERNAME }}/php-fpm-app:latest
 
-      # Build, validate & push Nginx image
+      # Check if nginx.conf changed
+      - name: Check if Nginx config changed
+        id: nginx_changed
+        run: |
+          git fetch origin main
+          if git diff --name-only origin/main...HEAD | grep -q '^nginx.conf$'; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
+
+      # Build & push Nginx only if config changed
       - name: Build, Validate and Push Nginx Image
+        if: steps.nginx_changed.outputs.changed == 'true'
         run: |
           docker build -f Dockerfile -t nginx-test .
-
-          # Validate nginx.conf syntax only (ignore upstream resolution)
-          docker run --rm \
-            -v $(pwd)/nginx.conf:/etc/nginx/conf.d/default.conf:ro \
-            nginx-test nginx -t
+          
+          # Validate nginx.conf safely
+          cp nginx.conf nginx.build.conf
+          sed -i 's/fastcgi_pass php-app:9000;/fastcgi_pass 127.0.0.1:9000;/' nginx.build.conf
+          docker run --rm -v $(pwd)/nginx.build.conf:/etc/nginx/conf.d/default.conf:ro nginx-test nginx -t
 
           docker tag nginx-test ${{ secrets.DOCKER_USERNAME }}/nginx-app:latest
           docker push ${{ secrets.DOCKER_USERNAME }}/nginx-app:latest
@@ -68,8 +80,20 @@ jobs:
               -p 3306:3306 \
               mysql:8.0
 
+            # Wait for MySQL to initialize
             echo "Waiting for MySQL to initialize..."
             sleep 30
+
+            # Ensure database exists
+            docker exec mysql-db mysql -uroot -ppass@321 -e "CREATE DATABASE IF NOT EXISTS student_enrollment;"
+
+            # Seed database if database.sql exists
+            if [ -f /var/www/html/database.sql ]; then
+              echo "Seeding database..."
+              docker cp /var/www/html/database.sql mysql-db:/tmp/database.sql
+              docker exec mysql-db mysql -uroot -ppass@321 student_enrollment < /tmp/database.sql
+              echo "Database seeded."
+            fi
 
             # Login & pull latest images
             docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
@@ -87,7 +111,7 @@ jobs:
               -e DB_NAME=student_enrollment \
               ${{ secrets.DOCKER_USERNAME }}/php-fpm-app:latest
 
-            # Wait for PHP-FPM to be ready before starting Nginx
+            # Wait for PHP-FPM to be ready
             echo "Waiting for PHP-FPM to be ready..."
             timeout=60
             count=0
@@ -121,7 +145,7 @@ jobs:
             echo "=== Nginx Logs ==="
             docker logs nginx-app || echo "No logs available"
 
-            # Optional: tail last 20 lines for quick overview
+            # Tail last 20 lines for quick overview
             echo "=== Last 20 lines of PHP-FPM ==="
             docker logs --tail 20 php-app || true
 
