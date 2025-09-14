@@ -3,7 +3,7 @@ name: CI/CD for PHP App with Nginx and MySQL
 on:
   push:
     branches:
-      - main  # Trigger pipeline on push to main
+      - main
 
 jobs:
   build-and-push:
@@ -30,10 +30,10 @@ jobs:
         run: |
           docker build -f Dockerfile -t nginx-test .
 
-          # Validate nginx.conf
-          if ! docker run --rm --network app_network nginx-test nginx -t; then
+          # Validate nginx.conf WITHOUT network
+          if ! docker run --rm nginx-test nginx -t; then
             echo "❌ Nginx configuration failed! Logs:"
-            docker run --rm --network app_network nginx-test cat /var/log/nginx/error.log || true
+            docker run --rm nginx-test cat /var/log/nginx/error.log || true
             exit 1
           fi
 
@@ -55,7 +55,7 @@ jobs:
 
           ssh -o StrictHostKeyChecking=no -i private_key.pem ${{ secrets.AWS_USER }}@${{ secrets.AWS_HOST }} << 'EOF'
 
-            # Create Docker network
+            # Create Docker network if not exists
             docker network create app_network || true
 
             # Stop & remove old containers
@@ -93,4 +93,41 @@ jobs:
             echo "Waiting for PHP-FPM to be ready..."
             timeout=60
             count=0
-            until docker exec php-app bash -c "echo > /dev/tcp/127.0.0.1/9000" >/dev/
+            until docker exec php-app bash -c "echo > /dev/tcp/127.0.0.1/9000" >/dev/null 2>&1; do
+              sleep 2
+              count=$((count+2))
+              if [ $count -ge $timeout ]; then
+                echo "❌ PHP-FPM did not become ready in $timeout seconds!"
+                exit 1
+              fi
+            done
+            echo "✅ PHP-FPM is ready!"
+
+            # Run Nginx
+            docker run -d \
+              --name nginx-app \
+              --network app_network \
+              -p 80:80 \
+              -v /var/www/html:/var/www/html \
+              ${{ secrets.DOCKER_USERNAME }}/nginx-app:latest
+
+            # Wait a few seconds for containers to settle
+            sleep 5
+
+            echo "=== Running containers ==="
+            docker ps
+
+            echo "=== PHP-FPM Logs ==="
+            docker logs php-app || echo "No logs available"
+
+            echo "=== Nginx Logs ==="
+            docker logs nginx-app || echo "No logs available"
+
+            # Optional: tail last 20 lines for quick overview
+            echo "=== Last 20 lines of PHP-FPM ==="
+            docker logs --tail 20 php-app || true
+
+            echo "=== Last 20 lines of Nginx ==="
+            docker logs --tail 20 nginx-app || true
+
+          EOF
