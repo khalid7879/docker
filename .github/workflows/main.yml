@@ -39,7 +39,9 @@ jobs:
           echo "${{ secrets.AWS_KEY }}" > private_key.pem
           chmod 600 private_key.pem
           ssh -o StrictHostKeyChecking=no -i private_key.pem ${{ secrets.AWS_USER }}@${{ secrets.AWS_HOST }} << 'EOF'
-            # ensure docker login (for private images)
+            set -euo pipefail
+
+            # login to Docker Hub (for private images)
             echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin || true
 
             # Ensure network and app dir
@@ -48,21 +50,19 @@ jobs:
             chown -R ubuntu:ubuntu /home/ubuntu/app || true
 
             # Stop & remove existing containers
-            docker stop php-nginx || true && docker rm php-nginx || true
-            docker stop php-web || true && docker rm php-web || true
-            docker stop mysql-db || true && docker rm mysql-db || true
+            docker rm -f php-nginx php-web mysql-db || true
 
             # Pull latest images
             docker pull ${{ secrets.DOCKER_USERNAME }}/php-web || true
             docker pull ${{ secrets.DOCKER_USERNAME }}/php-nginx || true
 
-            # Run MySQL
+            # Run MySQL (if not already)
             docker run -d --name mysql-db --network app_network \
               -e MYSQL_ROOT_PASSWORD=pass@321 \
               -e MYSQL_DATABASE=student_enrollment \
               -p 3306:3306 \
               --restart unless-stopped \
-              mysql:8.0
+              mysql:8.0 || true
 
             echo "Waiting for MySQL to initialize..."
             sleep 20
@@ -79,9 +79,23 @@ jobs:
               -p 80:80 \
               -v /home/ubuntu/app:/var/www/html:ro \
               --restart unless-stopped \
-              ${{ secrets.DOCKER_USERNAME }}/php-nginx
+              ${{ secrets.DOCKER_USERNAME }}/php-nginx || true
 
-            # show status & logs for quick debugging
+            # Wait a few seconds, then check status
+            sleep 5
+            echo "Container status:"
             docker ps -a --filter "name=php-nginx" --format "table {{.Names}}\t{{.Status}}\t{{.Image}}"
-            docker logs php-nginx --tail 100 || true
+
+            status=$(docker inspect --format '{{.State.Status}}' php-nginx 2>/dev/null || echo "missing")
+            echo "php-nginx state: $status"
+
+            if [ "$status" != "running" ]; then
+              echo "php-nginx logs (last 200 lines):"
+              docker logs php-nginx --tail 200 || true
+              echo "Inspect output:"
+              docker inspect php-nginx || true
+              exit 1
+            fi
+
+            echo "php-nginx is running"
           EOF
