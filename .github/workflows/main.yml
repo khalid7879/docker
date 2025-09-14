@@ -30,12 +30,10 @@ jobs:
         run: |
           docker build -f Dockerfile -t nginx-test .
 
-          # Validate nginx.conf WITHOUT network
-          if ! docker run --rm nginx-test nginx -t; then
-            echo "❌ Nginx configuration failed! Logs:"
-            docker run --rm nginx-test cat /var/log/nginx/error.log || true
-            exit 1
-          fi
+          # Validate nginx.conf syntax only (ignore upstream resolution)
+          docker run --rm \
+            -v $(pwd)/nginx.conf:/etc/nginx/conf.d/default.conf:ro \
+            nginx-test nginx -t
 
           docker tag nginx-test ${{ secrets.DOCKER_USERNAME }}/nginx-app:latest
           docker push ${{ secrets.DOCKER_USERNAME }}/nginx-app:latest
