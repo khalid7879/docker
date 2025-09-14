@@ -1,9 +1,10 @@
-name: CI/CD for PHP App
+name: CI/CD for PHP App with Nginx and MySQL
 
 on:
   push:
     branches:
       - main  # Trigger pipeline on push to main
+
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
@@ -18,15 +19,15 @@ jobs:
       - name: Login to Docker Hub
         run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
 
-      - name: Build and Push Docker Images
+      - name: Build and Push PHP-FPM Image
         run: |
-          # Build Nginx image
-          docker build -t ${{ secrets.DOCKER_USERNAME }}/php-nginx -f Dockerfile .
-          docker push ${{ secrets.DOCKER_USERNAME }}/php-nginx
+          docker build -f php.Dockerfile -t ${{ secrets.DOCKER_USERNAME }}/php-fpm-app .
+          docker push ${{ secrets.DOCKER_USERNAME }}/php-fpm-app
 
-          # Build PHP (web) image
-          docker build -t ${{ secrets.DOCKER_USERNAME }}/php-web -f php.Dockerfile .
-          docker push ${{ secrets.DOCKER_USERNAME }}/php-web
+      - name: Build and Push Nginx Image
+        run: |
+          docker build -f Dockerfile -t ${{ secrets.DOCKER_USERNAME }}/nginx-app .
+          docker push ${{ secrets.DOCKER_USERNAME }}/nginx-app
 
   deploy:
     runs-on: ubuntu-latest
@@ -43,18 +44,14 @@ jobs:
 
           ssh -o StrictHostKeyChecking=no -i private_key.pem ${{ secrets.AWS_USER }}@${{ secrets.AWS_HOST }} << 'EOF'
 
-            # Set up Docker network (if needed)
+            # Create Docker network
             docker network create app_network || true
 
-            # Stop and remove existing containers
-            docker stop php-nginx || true
-            docker rm php-nginx || true
-            docker stop php-web || true
-            docker rm php-web || true
-            docker stop mysql-db || true
-            docker rm mysql-db || true
+            # Stop and remove old containers
+            docker stop php-app nginx-app mysql-db || true
+            docker rm php-app nginx-app mysql-db || true
 
-            # Run MySQL container
+            # Run MySQL
             docker run -d \
               --name mysql-db \
               --network app_network \
@@ -66,23 +63,28 @@ jobs:
             echo "Waiting for MySQL to initialize..."
             sleep 30
 
-            # Run PHP (web) container
+            # Pull latest images
+            docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
+            docker pull ${{ secrets.DOCKER_USERNAME }}/php-fpm-app
+            docker pull ${{ secrets.DOCKER_USERNAME }}/nginx-app
+
+            # Run PHP-FPM container
             docker run -d \
-              --name php-web \
+              --name php-app \
               --network app_network \
-              -v /home/ubuntu/app:/var/www/html \
+              -v /var/www/html:/var/www/html \
               -e DB_HOST=mysql-db \
               -e DB_USER=root \
               -e DB_PASSWORD=pass@321 \
               -e DB_NAME=student_enrollment \
-              ${{ secrets.DOCKER_USERNAME }}/php-web
+              ${{ secrets.DOCKER_USERNAME }}/php-fpm-app
 
             # Run Nginx container
             docker run -d \
-              --name php-nginx \
+              --name nginx-app \
               --network app_network \
               -p 80:80 \
-              -v /home/ubuntu/app:/var/www/html \
-              ${{ secrets.DOCKER_USERNAME }}/php-nginx
+              -v /var/www/html:/var/www/html \
+              ${{ secrets.DOCKER_USERNAME }}/nginx-app
 
           EOF
