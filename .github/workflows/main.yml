@@ -19,15 +19,17 @@ jobs:
       - name: Login to Docker Hub
         run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
 
+      # ✅ Build & Push PHP-FPM Image
       - name: Build and Push PHP-FPM Image
         run: |
-          docker build -f php.Dockerfile -t ${{ secrets.DOCKER_USERNAME }}/php-fpm-app .
-          docker push ${{ secrets.DOCKER_USERNAME }}/php-fpm-app
+          docker build -f php.Dockerfile -t ${{ secrets.DOCKER_USERNAME }}/php-fpm-app:latest .
+          docker push ${{ secrets.DOCKER_USERNAME }}/php-fpm-app:latest
 
+      # ✅ Build & Push Nginx Image
       - name: Build and Push Nginx Image
         run: |
-          docker build -f Dockerfile -t ${{ secrets.DOCKER_USERNAME }}/nginx-app .
-          docker push ${{ secrets.DOCKER_USERNAME }}/nginx-app
+          docker build -f Dockerfile -t ${{ secrets.DOCKER_USERNAME }}/nginx-app:latest .
+          docker push ${{ secrets.DOCKER_USERNAME }}/nginx-app:latest
 
   deploy:
     runs-on: ubuntu-latest
@@ -47,9 +49,8 @@ jobs:
             # Create Docker network
             docker network create app_network || true
 
-            # Stop and remove old containers
-            docker stop php-app nginx-app mysql-db || true
-            docker rm php-app nginx-app mysql-db || true
+            # Stop and remove old containers (ignore if not exist)
+            docker rm -f php-app nginx-app mysql-db || true
 
             # Run MySQL
             docker run -d \
@@ -62,29 +63,3 @@ jobs:
 
             echo "Waiting for MySQL to initialize..."
             sleep 30
-
-            # Pull latest images
-            docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
-            docker pull ${{ secrets.DOCKER_USERNAME }}/php-fpm-app
-            docker pull ${{ secrets.DOCKER_USERNAME }}/nginx-app
-
-            # Run PHP-FPM container
-            docker run -d \
-              --name php-app \
-              --network app_network \
-              -v /var/www/html:/var/www/html \
-              -e DB_HOST=mysql-db \
-              -e DB_USER=root \
-              -e DB_PASSWORD=pass@321 \
-              -e DB_NAME=student_enrollment \
-              ${{ secrets.DOCKER_USERNAME }}/php-fpm-app
-
-            # Run Nginx container
-            docker run -d \
-              --name nginx-app \
-              --network app_network \
-              -p 80:80 \
-              -v /var/www/html:/var/www/html \
-              ${{ secrets.DOCKER_USERNAME }}/nginx-app
-
-          EOF
