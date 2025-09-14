@@ -1,4 +1,4 @@
-name: CI/CD for Flask App (Without Docker Compose)
+name: CI/CD for PHP App
 
 on:
   push:
@@ -19,10 +19,15 @@ jobs:
       - name: Login to Docker Hub
         run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
 
-      - name: Build and Push Docker Image
+      - name: Build and Push Docker Images
         run: |
-          docker build -t ${{ secrets.DOCKER_USERNAME }}/flask-attendance-app .
-          docker push ${{ secrets.DOCKER_USERNAME }}/flask-attendance-app
+          # Build Nginx image
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/php-nginx -f Dockerfile .
+          docker push ${{ secrets.DOCKER_USERNAME }}/php-nginx
+
+          # Build PHP (web) image
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/php-web -f php.Dockerfile .
+          docker push ${{ secrets.DOCKER_USERNAME }}/php-web
 
   deploy:
     runs-on: ubuntu-latest
@@ -42,41 +47,43 @@ jobs:
             # Set up Docker network (if needed)
             docker network create app_network || true
 
-            # Stop and remove existing MySQL and Flask containers if they exist
+            # Stop and remove existing containers
+            docker stop php-nginx || true
+            docker rm php-nginx || true
+            docker stop php-web || true
+            docker rm php-web || true
             docker stop mysql-db || true
             docker rm mysql-db || true
-            docker stop flask-app || true
-            docker rm flask-app || true
 
             # Run MySQL container
             docker run -d \
               --name mysql-db \
               --network app_network \
-              -e MYSQL_ROOT_PASSWORD=root \
-              -e MYSQL_DATABASE=attendance_db \
+              -e MYSQL_ROOT_PASSWORD=pass@321 \
+              -e MYSQL_DATABASE=student_enrollment \
               -p 3306:3306 \
-              mysql:latest
+              mysql:8.0
 
-            # Wait for MySQL to fully start
             echo "Waiting for MySQL to initialize..."
             sleep 30
 
-            # Create database (this is optional if you want to ensure it exists)
-            docker exec mysql-db mysql -uroot -prootpassword -e "CREATE DATABASE IF NOT EXISTS attendance_db;"
-
-            # Pull latest Flask app
-            docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
-            docker pull ${{ secrets.DOCKER_USERNAME }}/flask-attendance-app
-
-            # Run Flask app container
+            # Run PHP (web) container
             docker run -d \
-              --name flask-app \
+              --name php-web \
               --network app_network \
-              -p 5000:5000 \
+              -v /home/ubuntu/app:/var/www/html \
               -e DB_HOST=mysql-db \
               -e DB_USER=root \
-              -e DB_PASSWORD=root \
-              -e DB_NAME=attendance_db \
-              ${{ secrets.DOCKER_USERNAME }}/flask-attendance-app
+              -e DB_PASSWORD=pass@321 \
+              -e DB_NAME=student_enrollment \
+              ${{ secrets.DOCKER_USERNAME }}/php-web
+
+            # Run Nginx container
+            docker run -d \
+              --name php-nginx \
+              --network app_network \
+              -p 80:80 \
+              -v /home/ubuntu/app:/var/www/html \
+              ${{ secrets.DOCKER_USERNAME }}/php-nginx
 
           EOF
