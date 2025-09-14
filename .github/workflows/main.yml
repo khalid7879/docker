@@ -25,10 +25,12 @@ jobs:
           docker build -f php.Dockerfile -t ${{ secrets.DOCKER_USERNAME }}/php-fpm-app:latest .
           docker push ${{ secrets.DOCKER_USERNAME }}/php-fpm-app:latest
 
-      # ✅ Build & Push Nginx Image
-      - name: Build and Push Nginx Image
+      # ✅ Build Nginx Image (with config validation)
+      - name: Build Nginx Image
         run: |
-          docker build -f Dockerfile -t ${{ secrets.DOCKER_USERNAME }}/nginx-app:latest .
+          docker build -f Dockerfile -t nginx-test .
+          docker run --rm nginx-test nginx -t   # <-- validate nginx.conf
+          docker tag nginx-test ${{ secrets.DOCKER_USERNAME }}/nginx-app:latest
           docker push ${{ secrets.DOCKER_USERNAME }}/nginx-app:latest
 
   deploy:
@@ -49,7 +51,7 @@ jobs:
             # Create Docker network
             docker network create app_network || true
 
-            # Stop and remove old containers (ignore if not exist)
+            # Stop and remove old containers
             docker rm -f php-app nginx-app mysql-db || true
 
             # Run MySQL
@@ -63,3 +65,41 @@ jobs:
 
             echo "Waiting for MySQL to initialize..."
             sleep 30
+
+            # Login & pull latest images
+            docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
+            docker pull ${{ secrets.DOCKER_USERNAME }}/php-fpm-app:latest
+            docker pull ${{ secrets.DOCKER_USERNAME }}/nginx-app:latest
+
+            # Run PHP-FPM
+            docker run -d \
+              --name php-app \
+              --network app_network \
+              -v /var/www/html:/var/www/html \
+              -e DB_HOST=mysql-db \
+              -e DB_USER=root \
+              -e DB_PASSWORD=pass@321 \
+              -e DB_NAME=student_enrollment \
+              ${{ secrets.DOCKER_USERNAME }}/php-fpm-app:latest
+
+            # Run Nginx
+            docker run -d \
+              --name nginx-app \
+              --network app_network \
+              -p 80:80 \
+              -v /var/www/html:/var/www/html \
+              ${{ secrets.DOCKER_USERNAME }}/nginx-app:latest
+
+            # Wait a few seconds for containers to settle
+            sleep 5
+
+            echo "=== Running containers ==="
+            docker ps
+
+            echo "=== Logs: php-app ==="
+            docker logs php-app || true
+
+            echo "=== Logs: nginx-app ==="
+            docker logs nginx-app || true
+
+          EOF
