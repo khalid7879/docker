@@ -69,7 +69,6 @@ jobs:
 
             # Run PHP (web)
             docker run -d --name php-web --network app_network \
-              -v /home/ubuntu/app:/var/www/html \
               -e DB_HOST=mysql-db -e DB_USER=root -e DB_PASSWORD=pass@321 -e DB_NAME=student_enrollment \
               --restart unless-stopped \
               ${{ secrets.DOCKER_USERNAME }}/php-web
@@ -77,7 +76,6 @@ jobs:
             # Run Nginx
             docker run -d --name php-nginx --network app_network \
               -p 80:80 \
-              -v /home/ubuntu/app:/var/www/html:ro \
               --restart unless-stopped \
               ${{ secrets.DOCKER_USERNAME }}/php-nginx || true
 
