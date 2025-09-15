@@ -43,7 +43,7 @@ jobs:
             set -euo pipefail
 
             # login to Docker Hub (for private images)
-            echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin || true
+            echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
 
             # Ensure network and app dir
             docker network create app_network || true
@@ -54,19 +54,19 @@ jobs:
 
             # Pull latest images
             echo "DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}"
-            echo "Running command: docker pull ${{ secrets.DOCKER_USERNAME }}/php-web || true"
-            docker pull ${{ secrets.DOCKER_USERNAME }}/php-web || true
-            echo "Running command: docker pull ${{ secrets.DOCKER_USERNAME }}/php-nginx || true"
-            docker pull ${{ secrets.DOCKER_USERNAME }}/php-nginx || true
+            echo "Running command: docker pull ${{ secrets.DOCKER_USERNAME }}/php-web"
+            docker pull ${{ secrets.DOCKER_USERNAME }}/php-web
+            echo "Running command: docker pull ${{ secrets.DOCKER_USERNAME }}/php-nginx"
+            docker pull ${{ secrets.DOCKER_USERNAME }}/php-nginx
 
             # Run MySQL (if not already)
-            docker run -d --name mysql-db --network app_network 
-              -v /home/ubuntu/app/database.sql:/docker-entrypoint-initdb.d/database.sql 
-              -e MYSQL_ROOT_PASSWORD=pass@321 
-              -e MYSQL_DATABASE=student_enrollment 
-              -p 3306:3306 
-              --restart unless-stopped 
-              mysql:8.0 || true
+            docker run -d --name mysql-db --network app_network \
+              -v /home/ubuntu/app/database.sql:/docker-entrypoint-initdb.d/database.sql \
+              -e MYSQL_ROOT_PASSWORD=pass@321 \
+              -e MYSQL_DATABASE=student_enrollment \
+              -p 3306:3306 \
+              --restart unless-stopped \
+              mysql:8.0
 
             echo "Waiting for MySQL to initialize..."
             sleep 20
@@ -81,21 +81,22 @@ jobs:
             docker run -d --name php-nginx --network app_network \
               -p 80:80 \
               --restart unless-stopped \
-              ${{ secrets.DOCKER_USERNAME }}/php-nginx || true
+              ${{ secrets.DOCKER_USERNAME }}/php-nginx
+nginx
 
             # Wait a few seconds, then check status
             sleep 7
             echo "Container status:"
             docker ps -a --filter "name=php-nginx" --format "table {{.Names}}\t{{.Status}}\t{{.Image}}"
 
-            status=$(docker inspect --format '{{.State.Status}}' php-nginx 2>/dev/null || echo "missing")
+            status=$(docker inspect --format '{{.State.Status}}' php-nginx 2>/dev/null)
             echo "php-nginx state: $status"
 
             if [ "$status" != "running" ]; then
               echo "php-nginx logs (last 200 lines):"
-              docker logs php-nginx --tail 200 || true
+              docker logs php-nginx --tail 200
               echo "Inspect output:"
-              docker inspect php-nginx || true
+              docker inspect php-nginx
               exit 1
             fi
 
