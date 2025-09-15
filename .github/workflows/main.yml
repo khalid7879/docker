@@ -38,6 +38,7 @@ jobs:
         run: |
           echo "${{ secrets.AWS_KEY }}" > private_key.pem
           chmod 600 private_key.pem
+          scp -o StrictHostKeyChecking=no -i private_key.pem database.sql ${{ secrets.AWS_USER }}@${{ secrets.AWS_HOST }}:/home/ubuntu/app/database.sql
           ssh -o StrictHostKeyChecking=no -i private_key.pem ${{ secrets.AWS_USER }}@${{ secrets.AWS_HOST }} << 'EOF'
             set -euo pipefail
 
@@ -47,7 +48,6 @@ jobs:
             # Ensure network and app dir
             docker network create app_network || true
             mkdir -p /home/ubuntu/app
-            chown -R ubuntu:ubuntu /home/ubuntu/app || true
 
             # Stop & remove existing containers
             docker rm -f php-nginx php-web mysql-db || true
@@ -57,11 +57,12 @@ jobs:
             docker pull ${{ secrets.DOCKER_USERNAME }}/php-nginx || true
 
             # Run MySQL (if not already)
-            docker run -d --name mysql-db --network app_network \
-              -e MYSQL_ROOT_PASSWORD=pass@321 \
-              -e MYSQL_DATABASE=student_enrollment \
-              -p 3306:3306 \
-              --restart unless-stopped \
+            docker run -d --name mysql-db --network app_network 
+              -v /home/ubuntu/app/database.sql:/docker-entrypoint-initdb.d/database.sql 
+              -e MYSQL_ROOT_PASSWORD=pass@321 
+              -e MYSQL_DATABASE=student_enrollment 
+              -p 3306:3306 
+              --restart unless-stopped 
               mysql:8.0 || true
 
             echo "Waiting for MySQL to initialize..."
