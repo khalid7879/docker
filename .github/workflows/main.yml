@@ -82,7 +82,6 @@ jobs:
               -p 80:80 \
               --restart unless-stopped \
               ${{ secrets.DOCKER_USERNAME }}/php-nginx
-nginx
 
             # Wait a few seconds, then check status
             sleep 7
