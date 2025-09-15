@@ -61,6 +61,7 @@ jobs:
 
             # Run MySQL (if not already)
             docker run -d --name mysql-db --network app_network \
+              -v db_data:/var/lib/mysql \
               -v /home/ubuntu/app/database.sql:/docker-entrypoint-initdb.d/database.sql \
               -e MYSQL_ROOT_PASSWORD=pass@321 \
               -e MYSQL_DATABASE=student_enrollment \
