@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Student Enrollment App</title>
+  <title>Student Enrollment Rupy</title>
   <link rel="stylesheet" type="text/css" href="style.css">
 </head>
 <body>
