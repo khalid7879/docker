@@ -53,7 +53,10 @@ jobs:
             docker rm -f php-nginx php-web mysql-db || true
 
             # Pull latest images
+            echo "DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}"
+            echo "Running command: docker pull ${{ secrets.DOCKER_USERNAME }}/php-web || true"
             docker pull ${{ secrets.DOCKER_USERNAME }}/php-web || true
+            echo "Running command: docker pull ${{ secrets.DOCKER_USERNAME }}/php-nginx || true"
             docker pull ${{ secrets.DOCKER_USERNAME }}/php-nginx || true
 
             # Run MySQL (if not already)
