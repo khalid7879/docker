@@ -1,13 +1,13 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Student Enrollment Rupy</title>
+  <title>Student Enrollment Data</title>
   <link rel="stylesheet" type="text/css" href="style.css">
 </head>
 <body>
 
 <div class="container">
-  <h2>Student Enrollment Data</h2>
+  <h2>Student Enrollment Database/h2>
   <form action="enroll.php" method="post">
     <label for="name">Name:</label>
     <input type="text" id="name" name="name" required>
