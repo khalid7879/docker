@@ -84,7 +84,7 @@ jobs:
               ${{ secrets.DOCKER_USERNAME }}/php-nginx || true
 
             # Wait a few seconds, then check status
-            sleep 5
+            sleep 7
             echo "Container status:"
             docker ps -a --filter "name=php-nginx" --format "table {{.Names}}\t{{.Status}}\t{{.Image}}"
 
